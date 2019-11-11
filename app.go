@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	firebase "firebase.google.com/go"
+	"firebase.google.com/go/auth"
 )
 
 func main() {
@@ -22,27 +25,37 @@ func main() {
 }
 
 func top(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "http://localhost:4200")
-
+	// Firebase Auth クライアントの作成
 	ctx := r.Context()
-	app, err := firebase.NewApp(ctx, nil)
+	client, err := newClient(ctx)
 	if err != nil {
 		log.Fatalf("error initializing app: %v\n", err)
 	}
-	client, err := app.Auth(ctx)
-	if err != nil {
-		log.Fatalf("error getting Auth client: %v\n", err)
-	}
 
-	idToken := r.URL.Query().Get("token")
+	log.Printf("HEADER %+v", r.Header)
 
+	// ヘッダから ID Token の取得
+	idToken := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+
+	// ID Token の検証
 	token, err := client.VerifyIDToken(ctx, idToken)
 	if err != nil {
 		log.Fatalf("error verifying ID token: %v\n", err)
 	}
 
-	log.Printf("Verified ID token: %v\n", token)
+	w.Header().Set("Access-Control-Allow-Headers", "Authorization")
+	w.Header().Set("Access-Control-Allow-Origin", "http://localhost:4200")
+	fmt.Fprintf(w, `{"result":"verified id token. %v"}`, token)
+}
 
-	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, `{"result":"ok"}`)
+func newClient(ctx context.Context) (*auth.Client, error) {
+	app, err := firebase.NewApp(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	client, err := app.Auth(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return client, err
 }
