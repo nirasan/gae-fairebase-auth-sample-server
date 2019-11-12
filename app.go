@@ -10,18 +10,30 @@ import (
 
 	firebase "firebase.google.com/go"
 	"firebase.google.com/go/auth"
+	"github.com/rs/cors"
 )
 
 func main() {
-	http.HandleFunc("/", top)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", top)
 
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 		log.Printf("Defaulting to port %s", port)
 	}
+	addr := fmt.Sprintf(":%s", port)
 
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", port), nil))
+	if os.Getenv("ENABLE_CORS") != "" {
+		c := cors.New(cors.Options{
+			AllowedOrigins: []string{"http://localhost:4200"},
+			AllowedHeaders: []string{"Authorization"},
+			Debug:          true,
+		})
+		log.Fatal(http.ListenAndServe(addr, c.Handler(mux)))
+	} else {
+		log.Fatal(http.ListenAndServe(addr, mux))
+	}
 }
 
 func top(w http.ResponseWriter, r *http.Request) {
@@ -32,8 +44,6 @@ func top(w http.ResponseWriter, r *http.Request) {
 		log.Fatalf("error initializing app: %v\n", err)
 	}
 
-	log.Printf("HEADER %+v", r.Header)
-
 	// ヘッダから ID Token の取得
 	idToken := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 
@@ -43,9 +53,7 @@ func top(w http.ResponseWriter, r *http.Request) {
 		log.Fatalf("error verifying ID token: %v\n", err)
 	}
 
-	w.Header().Set("Access-Control-Allow-Headers", "Authorization")
-	w.Header().Set("Access-Control-Allow-Origin", "http://localhost:4200")
-	fmt.Fprintf(w, `{"result":"verified id token. %v"}`, token)
+	fmt.Fprintf(w, `{"result":"verified id token. %+v"}`, token)
 }
 
 func newClient(ctx context.Context) (*auth.Client, error) {
